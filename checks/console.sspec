@@ -1,0 +1,111 @@
+---
+display: native
+timeout: 60
+----------- app code
+load "@TRY_RUBY@"
+----------- test code
+app = Shoes.APPS.first
+log = -> { app.instance_variable_get(:@log).contents.map(&:text) }
+canvas = -> { app.instance_variable_get(:@canvas).contents }
+prompt = -> { para("@prompt").text }
+enter = lambda do |code|
+  type_text code
+  press_key "\n"
+end
+
+click_on "or skip the lessons and just play"
+advance 0.3
+assert_includes paras.map(&:text), "Anything goes", "straight to the playground"
+
+# a method over three lines: the console waits for its end
+enter.("def twice(x)")
+assert_equal "..", prompt.()
+enter.("x * 2")
+enter.("end")
+assert_equal ">>", prompt.()
+assert_equal ["=> :twice"], log.().last(1)
+enter.("twice 21")
+assert_equal "=> 42", log.().last
+
+# Escape drops an unfinished line
+enter.("[1, 2,")
+assert_equal "..", prompt.()
+press_key :escape
+assert_equal ">>", prompt.()
+enter.("3")
+assert_equal "=> 3", log.().last, "the dropped line is forgotten"
+
+# what Ruby prints comes out in the console, then the value
+enter.('puts "fox"; print "bacon"; 7')
+assert_equal ["fox", "bacon", "=> 7"], log.().last(3)
+
+# mistakes are red and tidy, and the app goes on
+enter.("nope_nope")
+assert_match(/\ANameError: undefined local variable or method .nope_nope. for main\z/, log.().last)
+enter.("1 +* 2")
+assert_match(/\ASyntaxError: /, log.().last)
+enter.("exit")
+assert_match(/\ANoLeaving: the foxes are sitting on the door/, log.().last)
+enter.("visit '/'")
+assert_equal "/try", app.location, "the console cannot walk the app away"
+enter.("loop { }")
+assert_match(/\ATimeout: that took more than 3 seconds/, log.().last)
+
+# variables and methods stay until reset
+enter.("snack = :bacon")
+enter.("snack")
+assert_equal "=> :bacon", log.().last
+enter.("reset")
+enter.("snack")
+assert_match(/\ANameError/, log.().last)
+enter.("twice 2")
+assert_match(/\ANoMethodError|\ANameError/, log.().last, "methods are forgotten too")
+
+# drawing goes on the canvas, in the canvas's friendly pens
+enter.("oval 10, 10, 50")
+assert_equal 1, canvas.().grep(Shoes::Oval).size
+r, g, b, _a = pixel_at(631 + 35, 495 + 35)
+assert_equal [204, 52, 45], [r, g, b], "a ruby oval, not a black one"
+enter.("clear")
+assert_empty canvas.().grep(Shoes::Oval)
+assert_empty log.(), "clear empties the log too"
+
+# a timer the console starts draws on the canvas; one that raises stops itself
+enter.("@n = 0; @t = every(0.5) { |i| @n = i; oval i * 20, 10, 10 }")
+advance 1.6
+assert_operator canvas.().grep(Shoes::Oval).size, :>=, 3
+enter.("@bad = every(0.2) { |i| raise 'kaboom' if i == 1 }")
+advance 0.5
+assert_match(/\ARuntimeError in a timer: kaboom \(so it stopped\)/, log.().last)
+enter.("clear")
+enter.("@n")
+before = log.().last
+advance 2
+enter.("@n")
+assert_equal before, log.().last, "clear stops the console's timers"
+
+# history: Ctrl-P brings back what you typed
+enter.("6 * 7")
+press_key :control_p
+assert_equal "6 * 7", edit_line.text
+press_key :escape
+
+# the console's own words
+enter.("help")
+assert_includes log.(), "Everything else is Ruby!"
+enter.("lessons")
+assert_includes paras.map(&:text), "LESSON 1 OF 21"
+enter.("next")
+assert_includes paras.map(&:text), "LESSON 2 OF 21"
+enter.("back")
+assert_includes paras.map(&:text), "LESSON 1 OF 21"
+enter.("mute")
+assert Chime.muted
+assert_includes paras.map(&:text), "sound: off     front door"
+
+# the chimes are real WAVs for afplay (trapped here, so nothing is heard)
+Chime.muted = false
+enter.("2 + 6")
+sleep 0.3
+assert File.readlines(ENV.fetch("SPEC_TRAP_FILE"), chomp: true).any? { |l| l.start_with?("afplay ") && l.end_with?(".wav") },
+  "afplay was asked for a chime"

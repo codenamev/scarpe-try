@@ -1,0 +1,33 @@
+---
+display: native
+----------- app code
+load "@TRY_RUBY@"
+----------- test code
+app = Shoes.APPS.first
+
+# the front door: a big title, two foxes, a bubble and a way in
+assert_includes paras.map(&:text), "Try Ruby!"
+assert_equal "chunky bacon!", para("@shout").text
+r, g, b, _a = pixel_at(10, 10)
+[[251, r], [243, g], [223, b]].each { |want, got| assert_in_delta want, got, 2, "old paper at the top" }
+fox_orange = ->(x, y) { pr, pg, pb, _ = pixel_at(x, y); pr > 200 && pg.between?(90, 140) && pb < 80 }
+assert fox_orange.(318 + 60 * 1.45, 292 + 22 * 1.45), "the big fox's head is orange"
+
+# the foxes talk, and shout when the line is all capitals
+advance 2.5
+assert_equal "come in, come in!", para("@shout").text
+advance 2.4 * 3
+assert_equal "CHUNKY BACON!", para("@shout").text
+assert app.instance_variable_get(:@big_foxes).all? { |f| !f[:mouth].hidden }, "mouths open to shout"
+
+# in through the big button
+click_on "Come in and try!"
+advance 0.3
+assert_equal "/try", app.location
+assert_includes paras.map(&:text), "Hello, Ruby", "lesson one is on the card"
+type_text "2 + 6"
+assert_equal "2 + 6", edit_line.text, "the console's field has the focus from the start"
+
+# and back out again
+click_on "front door"
+assert_equal "/", app.location

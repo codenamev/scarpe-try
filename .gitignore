@@ -1,0 +1,7 @@
+/dist/
+/icon/square.png
+peek.png
+/shots/*
+!/shots/front-door.png
+!/shots/console-room.png
+!/shots/chunky-bacon.png

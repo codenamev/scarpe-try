@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs this app's checks with Scarpe's spec runner. Each check loads the app by an absolute path
+# (its sandbox has a HOME and a folder of its own), so this fills in where the app is, then runs
+# them all: ./checks/run, or ./checks/run lessons to run the ones whose names match.
+SCARPE="${SCARPE:-$HOME/scarpe}"
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/try-ruby-checks.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+for check in "$APP_DIR"/checks/*${1:+*$1*}.sspec; do
+  sed "s|@TRY_RUBY@|$APP_DIR/try_ruby.rb|g" "$check" > "$WORK/$(basename "$check")"
+done
+cd "$SCARPE" && RUBY="$(ruby -e 'print RbConfig.ruby')" && \
+  "$RUBY" spec/run --display native "$WORK"
